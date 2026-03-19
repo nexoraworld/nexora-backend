@@ -1,10 +1,8 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const jwt = require("jsonwebtoken");
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
@@ -12,93 +10,80 @@ app.use(express.json());
    MongoDB
 ======================== */
 mongoose.connect(process.env.MONGO_URI)
-.then(()=>console.log("MongoDB connected"))
-.catch(err=>console.log(err));
+.then(() => console.log("MongoDB connected"))
+.catch(err => console.log(err));
 
 /* ========================
-   USER MODEL
+   MODELS
 ======================== */
-const userSchema = new mongoose.Schema({
-  username:String,
-  password:String
+const User = mongoose.model("User", {
+  username: String,
+  password: String
 });
-const User = mongoose.model("User", userSchema);
 
-/* ========================
-   PRODUCT MODEL (GELİŞTİRİLDİ)
-======================== */
-const productSchema = new mongoose.Schema({
-  name:String,
-  price:Number,
-  owner:String
+const Product = mongoose.model("Product", {
+  name: String,
+  price: Number,
+  owner: String
 });
-const Product = mongoose.model("Product", productSchema);
 
 /* ========================
-   JWT MIDDLEWARE
+   AUTH (LOGIN / REGISTER)
 ======================== */
-function auth(req,res,next){
-  const header=req.headers.authorization;
-  if(!header) return res.status(401).json({message:"No token"});
-  try{
-    const token=header.split(" ")[1];
-    const decoded=jwt.verify(token,"SECRET");
-    req.user=decoded;
-    next();
-  }catch{
-    res.status(401).json({message:"Invalid token"});
+app.post("/auth/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  let user = await User.findOne({ username });
+
+  if (!user) {
+    // register
+    user = new User({ username, password });
+    await user.save();
+  } else {
+    // login kontrol
+    if (user.password !== password) {
+      return res.json({ message: "Wrong password" });
+    }
   }
-}
 
-/* ========================
-   AUTH
-======================== */
-app.post("/auth/register", async(req,res)=>{
-  const {username,password}=req.body;
-  const user=new User({username,password});
-  await user.save();
-  res.json({message:"Registered"});
-});
-
-app.post("/auth/login", async(req,res)=>{
-  const {username,password}=req.body;
-  const user=await User.findOne({username,password});
-  if(!user) return res.json({message:"Wrong credentials"});
-
-  const token=jwt.sign({username:user.username},"SECRET");
-  res.json({token});
+  res.json({
+    token: "ok",
+    username: user.username
+  });
 });
 
 /* ========================
    PRODUCTS
 ======================== */
-
-// GET
-app.get("/products", async(req,res)=>{
-  const products=await Product.find();
+app.get("/products", async (req, res) => {
+  const products = await Product.find();
   res.json(products);
 });
 
-// POST
-app.post("/products", auth, async(req,res)=>{
-  const product=new Product({
-    name:req.body.name,
-    price:req.body.price,
-    owner:req.user.username
-  });
-  await product.save();
-  res.json(product);
-});
+app.post("/products", async (req, res) => {
+  const { name, price, owner } = req.body;
 
-// DELETE
-app.delete("/products/:id", auth, async(req,res)=>{
-  const product=await Product.findById(req.params.id);
-  if(product.owner!==req.user.username){
-    return res.status(403).json({message:"Not yours"});
+  if (!name || !price) {
+    return res.status(400).json({ error: "Missing data" });
   }
-  await Product.findByIdAndDelete(req.params.id);
-  res.json({message:"Deleted"});
+
+  const newProduct = new Product({
+    name,
+    price,
+    owner
+  });
+
+  await newProduct.save();
+  res.json(newProduct);
 });
 
-const PORT=process.env.PORT||5000;
-app.listen(PORT, ()=>console.log("Server running"));
+app.delete("/products/:id", async (req, res) => {
+  await Product.findByIdAndDelete(req.params.id);
+  res.json({ message: "Deleted" });
+});
+
+/* ========================
+   START
+======================== */
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log("Server running"));
