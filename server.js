@@ -103,5 +103,37 @@ app.delete("/products/:id", verifyToken, async (req, res) => {
   res.json({ message: "Deleted" });
 });
 
+/* ========================
+   🔥 GITHUB AUTO DEPLOY
+======================== */
+app.post("/update-site", async (req, res) => {
+  try {
+    const content = req.body.content;
+
+    const response = await fetch(
+      `https://api.github.com/repos/${process.env.GITHUB_USERNAME}/${process.env.GITHUB_REPO}/contents/index.html`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `token ${process.env.GITHUB_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: "Auto update from Nexora 🚀",
+          content: Buffer.from(content).toString("base64"),
+          branch: process.env.GITHUB_BRANCH || "main"
+        }),
+      }
+    );
+
+    const data = await response.json();
+    res.json(data);
+
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: "Deploy failed" });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log("Server running on port", PORT));
