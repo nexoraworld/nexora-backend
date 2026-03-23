@@ -104,7 +104,7 @@ app.delete("/products/:id", verifyToken, async (req, res) => {
 });
 
 /* ========================
-   🔥 GITHUB AUTO DEPLOY
+   🔥 GITHUB AUTO DEPLOY (index.html)
 ======================== */
 app.post("/update-site", async (req, res) => {
   try {
@@ -132,6 +132,71 @@ app.post("/update-site", async (req, res) => {
   } catch (err) {
     console.log(err);
     res.status(500).json({ error: "Deploy failed" });
+  }
+});
+
+/* ========================
+   ✅ YENİ: GENEL DOSYA GÜNCELLEME (GITHUB API ile)
+   → Her türlü dosyayı overwrite eder: index.html, style.css, script.js, server.js vs.
+======================== */
+app.post("/update-file", async (req, res) => {
+  try {
+    const { filename, content, branch } = req.body;
+
+    // 1. Zorunlu alanları kontrol et
+    if (!filename || !content) {
+      return res.status(400).json({ error: "filename ve content zorunlu" });
+    }
+
+    // 2. GitHub API URL’i (örneğin /index.html, /style.css vs)
+    const GH_URL = `https://api.github.com/repos/${process.env.GITHUB_USERNAME}/${process.env.GITHUB_REPO}/contents/${filename}`;
+
+    // 3. Önce dosyanın hash/sha'sını almak için GET istek (varsa üstüne yaz,
+    // yoksa yeni dosya yarat)
+    const getRes = await fetch(GH_URL, {
+      method: "GET",
+      headers: {
+        Authorization: `token ${process.env.GITHUB_TOKEN}`,
+      },
+    });
+
+    let sha = null;
+    if (getRes.ok) {
+      const existing = await getRes.json();
+      sha = existing.sha;
+    }
+
+    // 4. PUT ile dosyayı güncelle (overwrite)
+    const putRes = await fetch(GH_URL, {
+      method: "PUT",
+      headers: {
+        Authorization: `token ${process.env.GITHUB_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: `Auto update file: ${filename} 🚀`,
+        content: Buffer.from(content).toString("base64"),
+        branch: branch || process.env.GITHUB_BRANCH || "main",
+        sha, // varsa eski versiyon hash'i, yoksa yeni dosya yaratılır
+      }),
+    });
+
+    const data = await putRes.json();
+
+    if (putRes.ok) {
+      return res.json({
+        message: "Dosya GitHub'a güncellendi",
+        data,
+      });
+    } else {
+      return res.status(putRes.status).json({
+        error: "GitHub API hatası",
+        data,
+      });
+    }
+  } catch (err) {
+    console.log("update-file error:", err);
+    return res.status(500).json({ error: "Güncelleme başarısız: " + err.message });
   }
 });
 
